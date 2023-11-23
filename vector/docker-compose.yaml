@@ -1,0 +1,44 @@
+version: "3.7"
+
+volumes:
+  proton-logs: {}
+
+services:
+  proton:
+    image: ghcr.io/timeplus-io/proton:latest
+    pull_policy: always
+    ports:
+      - "3218:3218" # HTTP Streaming
+      - "8463:8463" # TCP Streaming
+    volumes:
+      - proton-logs:/var/log/proton-server
+    healthcheck:
+      test: ["CMD", "curl", "http://localhost:3218/proton/ping"]
+      interval: 2s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  vector:
+    image: timberio/vector:0.34.1-debian
+    user: root
+    pull_policy: always
+    ports:
+      - 8686:8686
+    volumes:
+      - proton-logs:/var/log/proton-server
+      - ./config/vector.yaml:/etc/vector/vector.yaml
+    depends_on:
+      proton:
+        condition: service_healthy
+
+  init-stream:
+    image: ghcr.io/timeplus-io/proton:latest
+    command:
+      - sh
+      - -c
+      - |
+        proton-client -h proton --query "CREATE STREAM IF NOT EXISTS logs(raw string)"
+    depends_on:
+      proton:
+        condition: service_healthy

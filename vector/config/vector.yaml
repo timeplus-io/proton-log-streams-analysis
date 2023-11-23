@@ -1,0 +1,43 @@
+api:
+  enabled: true
+  address: "0.0.0.0:8686"
+
+sources:
+  logs:
+    type: "file"
+    multiline:
+      start_pattern : ^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}\.\d+)
+      mode : halt_before
+      condition_pattern : ^(\d{4}\.\d{2}\.\d{2} \d{2}:\d{2}:\d{2}\.\d+)
+      timeout_ms : 1000
+    include:
+      - "/var/log/proton-server/proton-server.err.log"
+
+transforms:
+  payload:
+    type: "lua"
+    inputs:
+      - "logs"
+    version: "2"
+    hooks:
+      process: |-
+        function (event, emit)
+          event.log.message = {
+            columns = {"raw"},
+            data = {{event.log.message}}
+          }
+        	emit(event)
+        end              
+
+sinks:
+  proton:
+    type: http
+    inputs:
+      - "payload"
+    compression: none
+    method: post
+    uri: http://proton:3218/proton/v1/ingest/streams/logs
+    batch:
+      max_events: 1
+    encoding:
+      codec: "text"
